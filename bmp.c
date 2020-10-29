@@ -3,7 +3,6 @@
 #include <string.h>
 #include <sys/stat.h> 
 
-
 //BMP image format reference
 //Will *probably* be used if we make conversion software
 /*
@@ -35,6 +34,10 @@ struct bmp_image {
 }
 */
 
+
+//TODO:
+//Get C struct working in arduino. i.e. CRGB from FastLED
+//Extract the RGB data into a convenient struct
 int main(int argc, char *argv[]) {
 
     FILE* fp;
@@ -48,7 +51,7 @@ int main(int argc, char *argv[]) {
     const char* pathname = argv[1];
 
     if ((fp = fopen(pathname, "rb") != NULL)) {
-
+ 
     }
 
     return 0;
