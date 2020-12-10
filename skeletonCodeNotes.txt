@@ -1,0 +1,85 @@
+    //everything is currently formatted incorrect. for example
+    //we may want the struct to be defined in an external .h file to be included everywhere else
+    //this lets it go between things more easily
+    //however all of this is dependent on the end setup of the files, for example is truely everything going to be done on PC side?
+    //eventually it will be running to where you can upload our unique file type to the arduino and the code running on it creates a new image
+    //however currently, we want everything to be done PC side and then one boy is uploaded to the arduino
+    //this enables an easier time in the beginning
+    //
+    //a lot of this file should just be helper functions that will be put together at the end
+
+//inputs: array of struct PixelRGB
+//returns: some format type that the arduino reads off of to display
+//how does the arduion display at the end? we want the end display code to be something like
+//
+//copy and pasted PixelRGB definitions for all of them as constants
+//
+//while(1){
+//  read encoder position
+//  calculate new S value based on encoder position, algorithm similar to one used to find slice from an image
+//  for(as many R){
+//      display(PixelRGB[R][S]->red, etc)
+//   }
+//   if we want to tryhard we can include a wait statement here based on a calculation from
+//   the arduino nano internal clock (16MHz) against time slices
+//   so that it isn't wasting a bunch of energy running the same calculation for the same time slice
+//   or it could be done with more checks/commands, for example if calculated s value is the same as the last one,
+//   don't bother running the display values (another interrupt?)
+//   wow it really was interrupt based the whole time lmao
+//}
+//R is ring, S is slice
+//in order for this to work the way we want it to, S needs to be some magic value set every time the encoder updates position
+//this can be done in a few ways, every time the interrupt to update the encoder value happens a new S is calculated or
+//S is a preprocessor macro that does the conversion everytime display is called
+//or we just make it all timer based based on however fast the lil arduino can run
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//preprocessor skeleton code
+//define constants max_r & max_s based on desired rings and slices
+//take in the bmp file
+//loop until end of file
+//  read() magic based on file format until a pixel is found
+//  x = atoi x value found based on reading from file format
+//  y = atoi y value etc
+//  red = etc
+//  green = etc
+//  blue = etc
+//  r = ring this pixel falls in calculated from algorithm with x & y as inputs
+//  s = slice etc
+//  PixelRGB[r][s]->red += red 
+//  PixelRGB[r][s] green etc
+//  blue etc
+//  PixelRGB[r][s]->pixels++
+//end loop
+//the reason above we do += and have a ->pixels value is because we're finding the average
+//remember the point of the pizza model is that multiple pixels will be in a section
+//and we want the average color to display, this provides arbitration to any size image, ring amount, and slice amount
+//
+//for length of r
+//  for length of s
+//      PixelRGB[r][s]->red = red / PixelRGB[r][s]->pixels
+//      green etc
+//      blue etc
+//  end loop
+//end loop
+//
+//now for the voodoo part
+//we need to output these results in a copy pastable way into a hard coded definition that will compile with
+//the code getting thrown onto the arduino
+//this is very dumb right now, and will be changed immediately next semester
+//**print to file magic to do what was described**
+//IMPORTANT - NEED TO CONSTANTS BECAUSE OF HOW ARDUINO MEMORY WORKS ( i think )
