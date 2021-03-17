@@ -1,17 +1,22 @@
-#define NUM_LED       (15)         // Number of LEDs
-#define NUM_BYTES     (NUM_LED*3)  // Number of total bytes (3 per each LED)
-#define DIGITAL_PIN   (2)          // Digital port number
-#define PORT          (PORTD)      // Digital pin's port
-#define PORT_PIN      (PORTD2)     // Digital pin's bit position
+#define NUM_LED           (15)         // Number of LEDs
+#define NUM_BYTES         (NUM_LED*3)  // Number of total bytes (3 per each LED)
+#define DIGITAL_PIN       (2)          // Digital port number
+#define PORT              (PORTD)      // Digital pin's port
+#define PORT_PIN          (PORTD2)     // Digital pin's bit position
+#define HALL_EFFECT_PIN   (3)          // Digital Pin to handle Hall-Effect interrupts
 
 #define NUM_BITS      (8)          // Bits per byte
 
 uint8_t* currentRGB = NULL; 
 uint32_t currentTime;
 uint8_t* RGBs = NULL;
+uint16_t rotations = 0;
 
 void setup() {
     pinMode(DIGITAL_PIN,OUTPUT);
+    pinMode(HALL_EFFECT_PIN, INPUT);
+    //Trigger rotation incrementation whenever hall effect sensor detects 
+    attachInterrupt(digitalPinToInterrupt(HALL_EFFECT_PIN), hallEffectISR, CHANGE);
     digitalWrite(DIGITAL_PIN,0);
     RGBs = (uint8_t *)malloc(NUM_BYTES);
     memset(RGBs, 0, NUM_BYTES);
@@ -19,20 +24,43 @@ void setup() {
     sendSignal();
 }
 
+void hallEffectISR() {
+    rotations++; 
+}
+
+/* 
+ *  New Plan:
+ *  
+ *  Read directly from SD card, use FASTLED
+ *  
+ *  Read from holofec sensor
+ *  
+ *  
+ *  
+ */
 void loop() { 
     uint8_t i;
     // Load RGB vals into program memory from preprocessor
     for(i=0;i<NUM_LED;i++)
-        //TODO: Grab color here from preprocessor struct, all white for now
-        setColorRGB(i, 30, 10, 0);
+        /*TODO: Grab color here from preprocessor struct, all white for now
+         * 
+         * Grab color from SD card, load it into program memory via
+         * setColorRGB
+         * 
+         */
+        
+        setColorRGB(i, i*15, i, i * 9);
     
     sendSignal();
-    //TODO: figure out delay, I believe this depends on fan speed?
-    delay(999);
+    /*    
+     * Make delay based on holofec sensor readings   
+     *     
+     */
+     delay(999);
 }
 
 void setColorRGB(uint16_t index, uint8_t red, uint8_t green, uint8_t blue) {
-    
+
     if(index < NUM_LED) {
         //Point to current set of 3 bytes
         uint8_t *p = &RGBs[index * 3]; 
@@ -57,15 +85,14 @@ void sendSignal(void) {
     cli(); 
 
     volatile uint8_t  
-        *p    = RGBs,   // Copy the start address of our data array
-        val  = *p++,      // Get the current byte value & point to next byte
+        *p    = RGBs,                 // Copy the start address of our data array
+        val  = *p++,                  // Get the current byte value & point to next byte
         high = PORT |  _BV(PORT_PIN), // Bitmask for sending HIGH to pin
         low  = PORT & ~_BV(PORT_PIN), // Bitmask for sending LOW to pin
-        tmp  = low,       // Swap variable to adjust duty cycle 
-        nbits= NUM_BITS;  // Bit counter for inner loop
+        tmp  = low,                   // Swap variable to adjust duty cycle 
+        nbits= NUM_BITS;              // Bit counter for inner loop
 
     volatile uint16_t nbytes = NUM_BYTES; // Byte counter for outer loop
-
        /*   The Arduino Nano/Uno/Mega run at 16MHz, which means each clock 
             cycle takes roughly 0.0625 uS. In order to send a 1 value, pulse is held
             HIGH for 0.8 uS then LOW for 0.45 uS for a total period of 1.25 uS which
@@ -77,7 +104,7 @@ void sendSignal(void) {
             is made considerably easier by the following two AVR asm commands:
 
             nop  - Idle for one clock cycle
-            rjmp - Idle for two clock cycles (Used by passing +0 flag)
+            rjmp - Idle for two clock cycles (Used by passing .+0 flag)
         */
         asm volatile(
                                 // Cycles                   
@@ -101,7 +128,7 @@ void sendSignal(void) {
          "nextbyte:\n\t"                                   
           "ldi  %5, 8\n\t"      // 1    reset bitcount              
           "ld   %4, %a8+\n\t"   // 3    val = *p++                  
-          "cbi   %0, %1\n\t"    // 5    signal LOW                  
+          "cbi   %0, %1\n\t"    // 5    signal LOW, will be held at the start of every loop if we're done loading in bytes                  
           "rjmp .+0\n\t"        // 7                         
           "nop\n\t"             // 8                             
           "dec %9\n\t"          // 9    decrease bytecount          
