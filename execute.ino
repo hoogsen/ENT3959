@@ -1,66 +1,112 @@
-#define NUM_LED           (15)         // Number of LEDs
-#define NUM_BYTES         (NUM_LED*3)  // Number of total bytes (3 per each LED)
-#define DIGITAL_PIN       (2)          // Digital port number
-#define PORT              (PORTD)      // Digital pin's port
-#define PORT_PIN          (PORTD2)     // Digital pin's bit position
-#define HALL_EFFECT_PIN   (3)          // Digital Pin to handle Hall-Effect interrupts
+#include <SPI.h>
+#include <SD.h>
 
-#define NUM_BITS      (8)          // Bits per byte
+#define NUM_LED           (15)          // Number of LEDs
+#define NUM_BYTES         (NUM_LED*3)   // Number of total bytes (3 per each LED)
+#define DIGITAL_PIN       (5)           // Digital port number
+#define PORT              (PORTD)       // Digital pin's port
+#define PORT_PIN          (PORTD2)      // Digital pin's bit position
+#define HALL_EFFECT_PIN   (2)           // Digital Pin to handle Hall-Effect interrupts
+#define SD_CS_PIN         (4)           // SD card reader pin
+#define NUM_BITS          (8)           // Bits per byte
+#define RGB_FILE_NAME     ("image.txt") // Name of preprocessed image text file containing RGB vals
+#define NUM_SLICES        (32)          // Number of time slices
 
 uint8_t* currentRGB = NULL; 
+uint16_t currentDelay = 0;
+uint32_t lastTime = 0;
 uint32_t currentTime;
-uint8_t* RGBs = NULL;
+uint8_t* RGBs;
+uint8_t* RGBreset;
 uint16_t rotations = 0;
-
-void setup() {
-    pinMode(DIGITAL_PIN,OUTPUT);
-    pinMode(HALL_EFFECT_PIN, INPUT);
-    //Trigger rotation incrementation whenever hall effect sensor detects 
-    attachInterrupt(digitalPinToInterrupt(HALL_EFFECT_PIN), hallEffectISR, CHANGE);
-    digitalWrite(DIGITAL_PIN,0);
-    RGBs = (uint8_t *)malloc(NUM_BYTES);
-    memset(RGBs, 0, NUM_BYTES);
-    //Send out a (0, 0, 0) signal first
-    sendSignal();
-}
-
-void hallEffectISR() {
-    rotations++; 
-}
+bool     hallCheck = false;
 
 /* 
- *  New Plan:
+ *  SD Card Reader Pins
  *  
- *  Read directly from SD card, use FASTLED
- *  
- *  Read from holofec sensor
- *  
- *  
- *  
+ *  MOSI - pin 11
+ *  MISO - pin 12
+ *  CLK - pin 13
+ *  CS - pin 4 
  */
-void loop() { 
-    uint8_t i;
-    // Load RGB vals into program memory from preprocessor
-    for(i=0;i<NUM_LED;i++)
-        /*TODO: Grab color here from preprocessor struct, all white for now
-         * 
-         * Grab color from SD card, load it into program memory via
-         * setColorRGB
-         * 
-         */
-        
-        setColorRGB(i, i*15, i, i * 9);
+void setup() {
+    //Serial Init for testing purposes, will be removed in final version
+    Serial.begin(9600);
+    while (!Serial) {}
     
+    pinMode(DIGITAL_PIN,OUTPUT);
+    pinMode(HALL_EFFECT_PIN, INPUT);
+
+    //Enable Hall Effect Sensor Interrupts 
+    attachInterrupt(digitalPinToInterrupt(HALL_EFFECT_PIN), hallEffectISR, CHANGE);
+    digitalWrite(DIGITAL_PIN,0);
+  
+    //SD reader init
+    if (!SD.begin(SD_CS_PIN)) {
+        Serial.println("Couldn't initialize SD card reader");
+        //return;
+    }
+    File f = SD.open("image.txt");
+    if (!f) {
+        Serial.println("error opening RGB file from SD card\n");
+        //return;
+    }
+
+    //Make space in memory for RGB values
+    RGBs = (uint8_t *)malloc(NUM_BYTES);
+    memset(RGBs, 0, NUM_BYTES);
+    RGBreset = RGBs;
+
+    //Send an initial (0, 0, 0) signal for LEDs
     sendSignal();
-    /*    
-     * Make delay based on holofec sensor readings   
-     *     
-     */
-     delay(999);
 }
 
-void setColorRGB(uint16_t index, uint8_t red, uint8_t green, uint8_t blue) {
+//Used for resetting memory each time slice
+void resetRGBMem() {
+    RGBs = RGBreset;
+    memset(RGBs, 0, NUM_BYTES);
+}
 
+/*
+*  Hall Effect ISR
+*
+*  Whenever this triggers another rotation has happened
+*  Calculate delay based on current RPM
+*/
+void hallEffectISR() {
+    if (hallCheck) {
+        currentDelay = (micros() - lastTime)/NUM_SLICES;
+        Serial.println(micros()); 
+    }
+    else
+        hallCheck = !hallCheck;
+}
+
+void loop() {
+    uint8_t i;
+    // Load RGB vals into program memory from preprocessor
+    for(i=0;i<NUM_LED;i++) {
+        /*
+         * TODO: Read in lines from preprocessed image from SD card 
+         * Grab color from SD card, load it into program memory via
+         * setColorRGB
+         */
+        setColorRGB(i, random(0, 255), random(0, 255), random(0, 255));
+    }
+
+    currentTime = micros();
+    sendSignal();
+    resetRGBMem();
+    delay(currentDelay);
+}
+
+/*
+*
+*  Populate RGB memory with values read in from SD card 
+*
+*/
+void setColorRGB(uint16_t index, uint8_t red, uint8_t green, uint8_t blue) {
+    
     if(index < NUM_LED) {
         //Point to current set of 3 bytes
         uint8_t *p = &RGBs[index * 3]; 
@@ -71,6 +117,26 @@ void setColorRGB(uint16_t index, uint8_t red, uint8_t green, uint8_t blue) {
     }
 }
 
+//Write to file, but why would we ever need to do that?
+void SD_write(File SDFile, char* msg) {
+    SDFile.print(msg);
+    SDFile.println();
+}
+
+//Read from file and print data to terminal
+void SD_read(File SDFile) {
+    Serial.println("pre_while");
+    while (SDFile.available()) {
+        Serial.println("About to read from file");
+        Serial.write(SDFile.read());
+    }
+}
+
+/*
+*  Read RGB values from program mem, use assembly
+*  magic to send signal formatted so WS2812B LEDs can
+*  read it.  
+*/
 void sendSignal(void) {
 
     if(!RGBs)
@@ -81,13 +147,10 @@ void sendSignal(void) {
     //Need to wait 50 microSeconds for the data to latch
     while((micros() - currentTime) < 50L);
 
-    //cli() - Disable Interrupts, needed for precise timing
-    cli(); 
-
     volatile uint8_t  
         *p    = RGBs,                 // Copy the start address of our data array
         val  = *p++,                  // Get the current byte value & point to next byte
-        high = PORT |  _BV(PORT_PIN), // Bitmask for sending HIGH to pin
+        high = PORT |  _BV(PORT_PIN), // Bitmask for sending HIGH to pin 
         low  = PORT & ~_BV(PORT_PIN), // Bitmask for sending LOW to pin
         tmp  = low,                   // Swap variable to adjust duty cycle 
         nbits= NUM_BITS;              // Bit counter for inner loop
@@ -106,6 +169,12 @@ void sendSignal(void) {
             nop  - Idle for one clock cycle
             rjmp - Idle for two clock cycles (Used by passing .+0 flag)
         */
+        //cli() - Disable Interrupts, needed for precise timing
+        //Once this happens should I 
+        //TODO: Test how badly delaying interrupts messes with Hall-Effect 
+        //This may break things
+        cli(); 
+
         asm volatile(
                                 // Cycles                   
          "nextbit:\n\t"
@@ -134,7 +203,7 @@ void sendSignal(void) {
           "dec %9\n\t"          // 9    decrease bytecount          
           "brne nextbit\n\t"    // 10   if bytecount !=0 -> nextbit 
           ::
-          // Input operands         Operand Id (w/ constraint)
+          // Input operands         Operand Id
           "I" (_SFR_IO_ADDR(PORT)), // %0
           "I" (PORT_PIN),           // %1
           "e" (&PORT),              // %a2
