@@ -184,20 +184,14 @@ int main(int argc, char *argv[]) {
                 }
             }
         }
-        
-
-
-        //outputting plaintext as matrix that will be copy pasted 
-        for(unsigned int i = 0; i < NUM_LEDS; i++){
-            printf("{{%x, %x, %x}", polarRGB[i][0].red, polarRGB[i][0].green, polarRGB[i][0].blue);
-            for(unsigned int j = 1; j < NUM_SLICES; j++){
-                printf(", {%x, %x, %x}", polarRGB[i][j].red, polarRGB[i][j].green, polarRGB[i][j].blue);
-            }
-            printf("},\n");
+      
+        for(unsigned int j = 1; j < NUM_SLICES; j++){
+            printf("%x %x %x", polarRGB[i][j].red, polarRGB[i][j].green, polarRGB[i][j].blue);
+	    for(unsigned int i = 0; i < NUM_LEDS; i++){
+           	 printf(" %x %x %x ", polarRGB[i][0].red, polarRGB[i][0].green, polarRGB[i][0].blue);
+	    }
         }
 
-
-        
     }else{
         perror("opening file failed: ");
     }
