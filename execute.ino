@@ -76,6 +76,14 @@ void resetRGBMem() {
 }
 
 /*
+ *  Reset RGB file currency pointer to allow for continuous reading
+ */
+void resetSDFile() {
+    f.close();
+    f = SD.open(RGB_FILENAME);
+}
+
+/*
 *  Hall Effect ISR
 *
 *  Whenever this triggers another rotation has happened
@@ -101,6 +109,8 @@ void loop() {
   //  delay(currentDelay);
     delay(200); //Test Delay
     sendSignal();
+    if (!f.available())
+        resetSDFile();
 }
 
 /*
@@ -161,7 +171,7 @@ void SD_read(File SDFile) {
            j++; 
         }
    }
-   //Serial.println("-------------------");
+  // Serial.println("-------------------");
 }
 
 /*
@@ -202,13 +212,12 @@ void sendSignal(void) {
             rjmp - Idle for two clock cycles (Used by passing .+0 flag)
         */
         //cli() - Disable Interrupts, needed for precise timing
-        //Once this happens should I 
         //TODO: Test how badly delaying interrupts messes with Hall-Effect 
-        //This may break things
+        //This may break things in 1/1000000 cases
         cli();
         
         asm volatile(
-                                // Cycles                   
+                                // Cycles
          "nextbit:\n\t"
           "sbi  %0, %1\n\t"     // 2    signal HIGH
           "sbrc %4, 7\n\t"      // 3    if MSB set
@@ -219,17 +228,17 @@ void sendSignal(void) {
           "mov  %6, %7\n\t"     // 9    reset tmp to low (default)
           "breq nextbyte\n\t"   // 10   if !bitcount -> nextbyte
           "rol  %4\n\t"         // 11   shift MSB leftwards
-          "rjmp .+0\n\t"        // 13   idle 2 clock cycles 
-          "cbi   %0, %1\n\t"    // 15   signal LOW                  
-          "rjmp .+0\n\t"        // 17   
-          "nop\n\t"             // 18                            
-          "rjmp nextbit\n\t"    // 20   bitcount !=0 -> nextbit     
+          "rjmp .+0\n\t"        // 13   idle 2 clock cycles
+          "cbi   %0, %1\n\t"    // 15   signal LOW
+          "rjmp .+0\n\t"        // 17
+          "nop\n\t"             // 18
+          "rjmp nextbit\n\t"    // 20   bitcount !=0 -> nextbit
           //The Timing for this loop falls within a timing window which the
           //WS2812B LEDs do not recognize, so there is no false data transmitted
-         "nextbyte:\n\t"                                   
-          "ldi  %5, 8\n\t"      // 1    reset bitcount              
-          "ld   %4, %a8+\n\t"   // 3    val = *p++                  
-          "cbi   %0, %1\n\t"    // 5    signal LOW, will be held at the start of every loop if we're done loading in bytes                  
+         "nextbyte:\n\t"
+          "ldi  %5, 8\n\t"      // 1    reset bitcount
+          "ld   %4, %a8+\n\t"   // 3    val = *p++
+          "cbi   %0, %1\n\t"    // 5    signal LOW, will be held at the start of every loop if we're done loading in bytes
           "rjmp .+0\n\t"        // 7                         
           "nop\n\t"             // 8                             
           "dec %9\n\t"          // 9    decrease bytecount          
