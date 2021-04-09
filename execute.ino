@@ -20,15 +20,10 @@ uint32_t currentTime;
 uint8_t* RGBs;
 uint8_t* RGBreset;
 uint16_t rotations = 0;
-bool     hallCheck = false;
 
 File f;
 
-/*  TODO: Reset currency pointer to beginning once end is hit
- *   - Detect when end is hit
- *   - Figure out LSEEK for type File
- *   - File is type from SD Library
- *   
+/*    
  *  SD Card Reader Pins
  *  
  *  MOSI - pin 11
@@ -45,7 +40,7 @@ void setup() {
     pinMode(HALL_EFFECT_PIN, INPUT);
 
     //Enable Hall Effect Sensor Interrupts 
-    attachInterrupt(digitalPinToInterrupt(HALL_EFFECT_PIN), hallEffectISR, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(HALL_EFFECT_PIN), hallEffectISR, RISING);
     digitalWrite(DIGITAL_PIN,0);
   
     //SD reader init
@@ -90,13 +85,7 @@ void resetSDFile() {
 *  Calculate delay based on current RPM
 */
 void hallEffectISR() {
-    if (hallCheck) {
-        //Set Delay in ms
-        currentDelay = ((micros() - lastTime)/NUM_SLICES) * 1000;
-        Serial.println(micros()); 
-    }
-    else
-        hallCheck = !hallCheck;
+    currentDelay = ((micros() - lastTime)/NUM_SLICES) * 1000;
 }
 
 void loop() {
@@ -104,9 +93,12 @@ void loop() {
     // Load RGB vals into program memory from preprocessor
     SD_read(f);
     currentTime = micros();
-    sendSignal();
+    
+    // Call LED driver
+    sendSignal();    
+    // Reset memory space to make room for next time slice
     resetRGBMem();
-  //  delay(currentDelay);
+    // delay(currentDelay);
     delay(200); //Test Delay
     sendSignal();
     if (!f.available())
@@ -114,13 +106,13 @@ void loop() {
 }
 
 /*
-   Populate RGB memory with values read in from SD card 
+*  Populate RGB memory with values read in from SD card 
 */
 void setColorRGB(uint16_t index, uint8_t red, uint8_t green, uint8_t blue) {
     if(index < NUM_LED) {
-        //Point to current set of 3 bytes
+        // Point to current set of 3 bytes
         uint8_t *p = &RGBs[index * 3]; 
-        
+        // Load RGB values into memory
         *p++ = green;  
         *p++ = red;
         *p   = blue;
@@ -142,6 +134,7 @@ void SD_read(File SDFile) {
     uint8_t lv = 0;    // LED_Value index
     uint8_t val[3];    // Integer LED value (0-255)
     uint8_t v = 0;     // Integer LED value index
+    
     while(j < NUM_LED) {
         c = SDFile.read();
         // Preprocessor outputs a space character as the value separator
