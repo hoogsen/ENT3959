@@ -14,7 +14,7 @@
 #define MAX_BRIGHTNESS    (32)          // Self-Explanatory, runs from 0-255
 
 uint8_t* currentRGB = NULL; 
-uint16_t currentDelay = 0;
+uint32_t currentDelay = 999999;
 uint32_t lastTime = 0;
 uint32_t currentTime;
 uint8_t* RGBs;
@@ -42,7 +42,8 @@ void setup() {
     //Enable Hall Effect Sensor Interrupts 
     attachInterrupt(digitalPinToInterrupt(HALL_EFFECT_PIN), hallEffectISR, RISING);
     digitalWrite(DIGITAL_PIN,0);
-  
+    digitalWrite(HALL_EFFECT_PIN,HIGH);
+    
     //SD reader init
     if (!SD.begin(SD_CS_PIN)) {
         Serial.println("Couldn't initialize SD card reader, exiting");
@@ -85,11 +86,12 @@ void resetSDFile() {
 *  Calculate delay based on current RPM
 */
 void hallEffectISR() {
-    currentDelay = ((micros() - lastTime)/NUM_SLICES) * 1000;
+    digitalWrite(HALL_EFFECT_PIN,HIGH);  
+    currentDelay = ((micros() - lastTime)/(NUM_SLICES * 1000));
+    lastTime = micros();
 }
 
 void loop() {
-    uint8_t i;
     // Load RGB vals into program memory from preprocessor
     SD_read(f);
     currentTime = micros();
@@ -98,8 +100,8 @@ void loop() {
     sendSignal();    
     // Reset memory space to make room for next time slice
     resetRGBMem();
-    // delay(currentDelay);
-    delay(200); //Test Delay
+    delay(currentDelay);
+    //delay(200); //Test Delay
     sendSignal();
     if (!f.available())
         resetSDFile();
@@ -207,7 +209,7 @@ void sendSignal(void) {
         //cli() - Disable Interrupts, needed for precise timing
         //TODO: Test how badly delaying interrupts messes with Hall-Effect 
         //This may break things in 1/1000000 cases
-        cli();
+      //  cli();
         
         asm volatile(
                                 // Cycles
@@ -250,6 +252,6 @@ void sendSignal(void) {
           "w" (nbytes)              // %9
         );
         //sei() - Re-Enable interrupts
-        sei();
+      //  sei();
         currentTime = micros();
 }
