@@ -1,7 +1,7 @@
 #include <SPI.h>
 #include <SD.h>
 
-#define NUM_LED           (18)          // Number of LEDs
+#define NUM_LED           (49)          // Number of LEDs
 #define NUM_BYTES         (NUM_LED*3)   // Number of total bytes (3 per each LED)
 #define DIGITAL_PIN       (5)           // Digital port number
 #define PORT              (PORTD)       // Digital pin's port
@@ -9,17 +9,18 @@
 #define HALL_EFFECT_PIN   (2)           // Digital Pin to handle Hall-Effect interrupts
 #define SD_CS_PIN         (4)           // SD card reader pin
 #define NUM_BITS          (8)           // Bits per byte
-#define RGB_FILENAME      ("theX.txt")  // Name of preprocessed image text file containing RGB vals
+#define RGB_FILENAME      ("theL.txt")  // Name of preprocessed image text file containing RGB vals
 #define NUM_SLICES        (32)          // Number of time slices
 #define MAX_BRIGHTNESS    (32)          // Self-Explanatory, runs from 0-255
 
 uint8_t* currentRGB = NULL; 
-uint32_t currentDelay = 999999;
+uint32_t currentDelay = 10;
 uint32_t lastTime = 0;
 uint32_t currentTime;
 uint8_t* RGBs;
 uint8_t* RGBreset;
 uint16_t rotations = 0;
+uint8_t  hallCount = 0;
 
 File f;
 
@@ -63,6 +64,9 @@ void setup() {
 
     //Send an initial (0, 0, 0) signal for LEDs
     sendSignal();
+
+    //Initialize Hall-Effect reference time
+    lastTime = micros();
 }
 
 //Used for resetting memory each time slice
@@ -86,9 +90,17 @@ void resetSDFile() {
 *  Calculate delay based on current RPM
 */
 void hallEffectISR() {
-    digitalWrite(HALL_EFFECT_PIN,HIGH);  
+    digitalWrite(HALL_EFFECT_PIN,HIGH);
+    //If there's still a bit of a delay it's here I need to change
+    // if (hallCount > 20) {
     currentDelay = ((micros() - lastTime)/(NUM_SLICES * 1000));
+
+    //    currentDelay = ((micros() - lastTime)/(NUM_SLICES * 1000 * hallCount));
+    //       hallCount = 0;
     lastTime = micros();
+    //   }
+    //   else
+    //       hallCount++;   
 }
 
 void loop() {
@@ -102,7 +114,7 @@ void loop() {
     resetRGBMem();
     delay(currentDelay);
     //delay(200); //Test Delay
-    sendSignal();
+    //sendSignal();
     if (!f.available())
         resetSDFile();
 }
