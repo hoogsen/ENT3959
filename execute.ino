@@ -1,7 +1,7 @@
 #include <SPI.h>
 #include <SD.h>
 
-#define NUM_LED           (49)          // Number of LEDs
+#define NUM_LED           (20)          // Number of LEDs
 #define NUM_BYTES         (NUM_LED*3)   // Number of total bytes (3 per each LED)
 #define DIGITAL_PIN       (5)           // Digital port number
 #define PORT              (PORTD)       // Digital pin's port
@@ -10,13 +10,16 @@
 #define SD_CS_PIN         (4)           // SD card reader pin
 #define NUM_BITS          (8)           // Bits per byte
 #define RGB_FILENAME      ("theL.txt")  // Name of preprocessed image text file containing RGB vals
-#define NUM_SLICES        (32)          // Number of time slices
+#define NUM_SLICES        (25)          // Number of time slices
 #define MAX_BRIGHTNESS    (32)          // Self-Explanatory, runs from 0-255
 
 uint8_t* currentRGB = NULL; 
 uint32_t currentDelay = 10;
 uint32_t lastTime = 0;
 uint32_t currentTime;
+uint32_t mathTime1 = 0;
+uint32_t mathTime2 = 0;
+uint32_t lastSlice = 0;
 uint8_t* RGBs;
 uint8_t* RGBreset;
 uint16_t rotations = 0;
@@ -33,12 +36,13 @@ File f;
  *  CS - pin 4 
  */
 void setup() {
-    //Serial Init for testing purposes, will be removed in final version
+    //Serial Init for testing purposes, TODO will be removed in final version
     Serial.begin(9600);
     while (!Serial) {}
     
     pinMode(DIGITAL_PIN,OUTPUT);
     pinMode(HALL_EFFECT_PIN, INPUT);
+    digitalWrite(HALL_EFFECT_PIN,HIGH); //enable 10k pullup resistor between signal and 5v on hall effect
 
     //Enable Hall Effect Sensor Interrupts 
     attachInterrupt(digitalPinToInterrupt(HALL_EFFECT_PIN), hallEffectISR, RISING);
@@ -47,13 +51,13 @@ void setup() {
     
     //SD reader init
     if (!SD.begin(SD_CS_PIN)) {
-        Serial.println("Couldn't initialize SD card reader, exiting");
+        Serial.println("Couldn't initialize SD card reader, exiting"); //TODO remove in final version
         return;
     }
 
     f = SD.open(RGB_FILENAME);
     if (!f) {
-        Serial.println("error opening RGB file from SD card, exiting");
+        Serial.println("error opening RGB file from SD card, exiting"); //TODO remove in final version
         return;
     }
 
@@ -67,6 +71,7 @@ void setup() {
 
     //Initialize Hall-Effect reference time
     lastTime = micros();
+    currentTime = micros();
 }
 
 //Used for resetting memory each time slice
@@ -83,40 +88,93 @@ void resetSDFile() {
     f = SD.open(RGB_FILENAME);
 }
 
+
+
 /*
-*  Hall Effect ISR
+*  Hall Effect ISR 
 *
 *  Whenever this triggers another rotation has happened
 *  Calculate delay based on current RPM
 */
+
 void hallEffectISR() {
-    digitalWrite(HALL_EFFECT_PIN,HIGH);
+    
     //If there's still a bit of a delay it's here I need to change
     // if (hallCount > 20) {
-    currentDelay = ((micros() - lastTime)/(NUM_SLICES * 1000));
+    currentDelay = ((micros() - lastTime)/(NUM_SLICES));
 
     //    currentDelay = ((micros() - lastTime)/(NUM_SLICES * 1000 * hallCount));
     //       hallCount = 0;
     lastTime = micros();
+    //Serial.print(currentDelay);
+    //Serial.println();
     //   }
     //   else
     //       hallCount++;   
 }
 
+
+/*
+ * Main loop of the function, every time it is entered it checks the time, then sees if the time should
+ * be in another time slice of code.
+ * an example would be that lets say at time = 100ms, time slice 4 is supposed to start
+ * and that time slice 5 does not start until 140ms (based on current rotational speed as seen by the hall sensor)
+ * every time the loop enters, it checks the time (100ms, 108ms, 114ms, etc)
+ * once that time is greater than 140ms, it has entered time slice 5 and buffers the next set of values to be used
+ * in addition to setting saying that we won't enter the next time slice until 180ms
+ */
 void loop() {
+    currentTime = micros(); //check current time so it can be compared to however long a time slice is + however long it was
+                            //when a time slice was last entered
+  if(currentTime > lastSlice+(currentDelay)){ //lastSlice is whenever this time slice started in time, currentDelay is how long 
+                                              //they should last
+    lastSlice = currentTime; //we are in a new time slice, since we've just entered it this is the time of the lastSlice now
+    if (!f.available()){ //checking if we hit EOF on the sd card reader
+        resetSDFile();  //if we did we have to go back to the beginning of the file
+    }
+    SD_read(f); //take the next NUM_LEDs values from the sd card file and store it LED_value
+    sendSignal(); //take the RGB values in LED_Value and send them to our LEDs
+    resetRGBMem(); //clear stuff out to make it nice
+  }
+  
+  /* TODO remove this old debug code
     // Load RGB vals into program memory from preprocessor
-    SD_read(f);
-    currentTime = micros();
-    
-    // Call LED driver
-    sendSignal();    
-    // Reset memory space to make room for next time slice
-    resetRGBMem();
-    delay(currentDelay);
-    //delay(200); //Test Delay
-    //sendSignal();
+    mathTime1 = micros();
+    //mathTime1 = micros();
     if (!f.available())
         resetSDFile();
+    //mathTime2 = micros();
+    //Serial.print("\ntime taken to check if the sdcard file is available and reset it: ");
+    //Serial.print(mathTime2-mathTime1);
+
+    //mathTime1 = micros();
+    SD_read(f);
+    //mathTime2 = micros();
+    //Serial.print("\ntime taken to read from sd card: ");
+    //Serial.print(mathTime2-mathTime1);
+    //currentTime = micros();
+    
+    // Call LED driver
+    //mathTime1 = micros();
+    sendSignal(); 
+    //mathTime2 = micros();
+    //Serial.print("\ntime taken to call the LED driver: ");
+    //Serial.print(mathTime2-mathTime1);   
+    // Reset memory space to make room for next time slice
+    //mathTime1 = micros();
+    resetRGBMem();
+    //mathTime2 = micros();
+    //Serial.print("\ntime taken to reset RGB memory ");
+    //Serial.print(mathTime2-mathTime1);   
+    //Serial.print("\ndelay ");
+    //Serial.print(currentDelay-(mathTime2-mathTime1));  
+    mathTime2 = micros();
+    delayMicroseconds(currentDelay);
+      
+    
+    //delay(200); //Test Delay
+    //sendSignal();
+  */
 }
 
 /*
@@ -131,8 +189,8 @@ void setColorRGB(uint16_t index, uint8_t red, uint8_t green, uint8_t blue) {
         *p++ = red;
         *p   = blue;
     }
-    else
-        Serial.println("We've gone out of bounds for some reason\n");
+    //else
+        //Serial.println("We've gone out of bounds for some reason\n");
 }
 
 //Write to file, but why would we ever need to do that?
@@ -209,12 +267,10 @@ void sendSignal(void) {
             cycle takes roughly 0.0625 uS. In order to send a 1 value, pulse is held
             HIGH for 0.8 uS then LOW for 0.45 uS for a total period of 1.25 uS which
             equates to 20 CLK cycles. 
-
             For a 0 value the signal is held HIGH for 0.4 uS and LOW for 0.85 uS
         
             Having the constraint of hitting exactly 20 clock cycles per transferred bit
             is made considerably easier by the following two AVR asm commands:
-
             nop  - Idle for one clock cycle
             rjmp - Idle for two clock cycles (Used by passing .+0 flag)
         */
