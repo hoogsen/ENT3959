@@ -1,6 +1,9 @@
 //README
 //only run with smaller sized bmps (like 100x100), there is a testBMP.bmp that is recommended to test with
 //send output to a text file to get usuable arduino matrix (./a.out testBMP.bmp > array.txt)
+//100x100 is because we are making a struct of size NxM based on how big the file is
+//this is an ape way to do it, and we don't have the system memory to be able to do more than that, so we segfault or bus error
+//this has to be fixed to do it piece by piece so that we don't flood the system
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -129,8 +132,8 @@ int main(int argc, char *argv[]) {
         //Another TODO to make things better is to have this functioned out better, whats a main doing doing all these steps? 
         
         
-#define NUM_LEDS 18
-#define NUM_SLICES 32
+#define NUM_LEDS 20
+#define NUM_SLICES 25
 #define PI 3.14159
         //polarRGB will be what we use to export the usuable (text) matrix
         struct PixelRGB polarRGB[NUM_LEDS][NUM_SLICES];
@@ -145,7 +148,7 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        uint8_t ring = 0;
+        int32_t ring = 0;
         int32_t slice = 0;
         
         //translated values are important because of the way the pizza model works
@@ -156,13 +159,18 @@ int main(int argc, char *argv[]) {
         int32_t translatedJ = 0;
         for(uint32_t i = 0; i < dataHeight; i++){
             for(uint32_t j = 0; j < dataWidth; j++){ //loop through all pixel data we have
+                //keep in mind, the BMP format starts with the bottom left hand corner of the image, so 0,0 should be -49, -49
                 translatedI = i - (dataHeight-1)/2; //for a 100x100 image the translation moves index [0][0] to position -49,-49
                 translatedJ = j - (dataWidth-1)/2;
                 //this looks like a lot of gibberish but is simple and TODO will be broken down more
                 //basically its a distance from center calculation and then putting the data in a bucket
-                ring = (sqrt(translatedI*translatedI + translatedJ*translatedJ)) / (sqrt((dataHeight/2)*(dataHeight/2) + (dataWidth/2)*(dataWidth/2))/NUM_LEDS);
+                //ring = (sqrt(translatedI*translatedI + translatedJ*translatedJ)) / (sqrt((dataHeight/2)*(dataHeight/2) + (dataWidth/2)*(dataWidth/2))/NUM_LEDS);
+                ring = (sqrt(translatedI*translatedI + translatedJ*translatedJ)) / (((double)dataHeight/2)/NUM_LEDS);
                 slice = (atan2(translatedI,translatedJ)+PI) / ((2*PI)/NUM_SLICES);  //same thing with slice as with ring
-                if(ring < NUM_LEDS){ //extra error checking for crazy unaccounted for scenarios, stops segfaults
+                //DEBUG
+                //printf("%.3f\t", (atan2(translatedI,translatedJ)+PI));
+                if(ring < NUM_LEDS){ //since our circle of translated values is within the square of the picture, those outside
+                    //the circle don't have anywhere to go, and we do not count them
                     polarRGB[ring][slice].red += pixelRGB[i][j].red;
                     polarRGB[ring][slice].green += pixelRGB[i][j].green;
                     polarRGB[ring][slice].blue += pixelRGB[i][j].blue;
@@ -172,6 +180,8 @@ int main(int argc, char *argv[]) {
                     //printf(" ring: %d slice %d \n", ring, slice);
                 }
             }
+                //DEBUG
+                //printf("\n");
         }
         
         //averaging out the values
@@ -185,16 +195,47 @@ int main(int argc, char *argv[]) {
             }
         }
       
-        for(unsigned int j = 1; j < NUM_SLICES; j++){
-            printf("%x %x %x", polarRGB[i][j].red, polarRGB[i][j].green, polarRGB[i][j].blue);
-	    for(unsigned int i = 0; i < NUM_LEDS; i++){
-           	 printf(" %x %x %x ", polarRGB[i][0].red, polarRGB[i][0].green, polarRGB[i][0].blue);
-	    }
+        /*
+        //TODO remove this //DEBUG output
+        for(unsigned int i = 0; i < NUM_SLICES; i++){
+	        for(unsigned int j = 0; j < NUM_LEDS; j++){
+           	    printf("%2x %2x %2x\t", polarRGB[j][i].red, polarRGB[j][i].green, polarRGB[j][i].blue);
+	        }
+            printf("\n"); //DEBUG
         }
+        */
+
+        //real output
+        //first one is LEDs, second one is slices
+        for(unsigned int i = 0; i < NUM_SLICES; i++){
+	        for(unsigned int j = 0; j < NUM_LEDS; j++){
+           	    printf("%d %d %d ", polarRGB[j][i].red, polarRGB[j][i].green, polarRGB[j][i].blue);
+	        }
+        }
+
+
+    //aa DEBUG this is all debug
+     
+        /*
+
+    int32_t debugI = -49;
+    int32_t debugJ = -1;
+    int32_t debugRing = 0;
+    int32_t debugSlice = 0;
+
+    printf("\n%f", (atan2(debugJ,debugI) +PI) / ((2*PI)/NUM_SLICES)  );
+
+    debugSlice = (atan2(debugJ,debugI) +PI) / ((2*PI)/NUM_SLICES);
+    debugRing = (sqrt(debugI*debugI + debugJ*debugJ)) / ((double)(dataHeight/2)/NUM_LEDS);
+    printf("\nring: %d\tslice: %d",debugRing,debugSlice);
+    printf("\nring: %f",  (sqrt(debugI*debugI + debugJ*debugJ)) / (((double)(dataHeight-1)/2)/NUM_LEDS) );
+
+    */
+
 
     }else{
         perror("opening file failed: ");
     }
-    
+    fclose(fp);
     return 0;
 }
