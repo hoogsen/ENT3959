@@ -132,9 +132,10 @@ int main(int argc, char *argv[]) {
         //Another TODO to make things better is to have this functioned out better, whats a main doing doing all these steps? 
         
         
-#define NUM_LEDS 20
-#define NUM_SLICES 25
+#define NUM_LEDS 49
+#define NUM_SLICES 32
 #define PI 3.14159
+#define MAX_BRIGHTNESS 32
         //polarRGB will be what we use to export the usuable (text) matrix
         struct PixelRGB polarRGB[NUM_LEDS][NUM_SLICES];
 
@@ -209,7 +210,7 @@ int main(int argc, char *argv[]) {
         //first one is LEDs, second one is slices
         for(unsigned int i = 0; i < NUM_SLICES; i++){
 	        for(unsigned int j = 0; j < NUM_LEDS; j++){
-           	    printf("%d %d %d ", polarRGB[j][i].red, polarRGB[j][i].green, polarRGB[j][i].blue);
+           	    printf("%c%c%c", polarRGB[j][i].red * MAX_BRIGHTNESS / 255, polarRGB[j][i].green * MAX_BRIGHTNESS / 255 , polarRGB[j][i].blue * MAX_BRIGHTNESS / 255);
 	        }
         }
 
