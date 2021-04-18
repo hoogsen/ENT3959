@@ -1,7 +1,7 @@
 #include <SPI.h>
 #include <SD.h>
 
-#define NUM_LED           (20)          // Number of LEDs
+#define NUM_LED           (49)          // Number of LEDs
 #define NUM_BYTES         (NUM_LED*3)   // Number of total bytes (3 per each LED)
 #define DIGITAL_PIN       (5)           // Digital port number
 #define PORT              (PORTD)       // Digital pin's port
@@ -10,7 +10,7 @@
 #define SD_CS_PIN         (4)           // SD card reader pin
 #define NUM_BITS          (8)           // Bits per byte
 #define RGB_FILENAME      ("theL.txt")  // Name of preprocessed image text file containing RGB vals
-#define NUM_SLICES        (25)          // Number of time slices
+#define NUM_SLICES        (32)          // Number of time slices
 #define MAX_BRIGHTNESS    (32)          // Self-Explanatory, runs from 0-255
 
 uint8_t* currentRGB = NULL; 
@@ -37,8 +37,8 @@ File f;
  */
 void setup() {
     //Serial Init for testing purposes, TODO will be removed in final version
-    Serial.begin(9600);
-    while (!Serial) {}
+    //Serial.begin(9600);
+    //while (!Serial) {}
     
     pinMode(DIGITAL_PIN,OUTPUT);
     pinMode(HALL_EFFECT_PIN, INPUT);
@@ -132,49 +132,10 @@ void loop() {
     if (!f.available()){ //checking if we hit EOF on the sd card reader
         resetSDFile();  //if we did we have to go back to the beginning of the file
     }
-    SD_read(f); //take the next NUM_LEDs values from the sd card file and store it LED_value
-    sendSignal(); //take the RGB values in LED_Value and send them to our LEDs
+    SD_read(f); //take the next NUM_LEDs values from the sd card file and store them in uint8_t* RGBs
+    sendSignal(); //take the RGB values in uint8_t* RGBs and send them to our LEDs
     resetRGBMem(); //clear stuff out to make it nice
   }
-  
-  /* TODO remove this old debug code
-    // Load RGB vals into program memory from preprocessor
-    mathTime1 = micros();
-    //mathTime1 = micros();
-    if (!f.available())
-        resetSDFile();
-    //mathTime2 = micros();
-    //Serial.print("\ntime taken to check if the sdcard file is available and reset it: ");
-    //Serial.print(mathTime2-mathTime1);
-
-    //mathTime1 = micros();
-    SD_read(f);
-    //mathTime2 = micros();
-    //Serial.print("\ntime taken to read from sd card: ");
-    //Serial.print(mathTime2-mathTime1);
-    //currentTime = micros();
-    
-    // Call LED driver
-    //mathTime1 = micros();
-    sendSignal(); 
-    //mathTime2 = micros();
-    //Serial.print("\ntime taken to call the LED driver: ");
-    //Serial.print(mathTime2-mathTime1);   
-    // Reset memory space to make room for next time slice
-    //mathTime1 = micros();
-    resetRGBMem();
-    //mathTime2 = micros();
-    //Serial.print("\ntime taken to reset RGB memory ");
-    //Serial.print(mathTime2-mathTime1);   
-    //Serial.print("\ndelay ");
-    //Serial.print(currentDelay-(mathTime2-mathTime1));  
-    mathTime2 = micros();
-    delayMicroseconds(currentDelay);
-      
-    
-    //delay(200); //Test Delay
-    //sendSignal();
-  */
 }
 
 /*
@@ -199,44 +160,31 @@ void SD_write(File SDFile, char* msg) {
     SDFile.println();
 }
 
+/*
+ * Pulls values from the SD card using the arduino SD card library
+ * These values are then stored in a global global variable so that
+ * the sendSignal function can access them and turn on the LEDs
+ */
 void SD_read(File SDFile) {
-    char c;
-    char LED_value[3]; // Up to 3 digit character LED value from SD card
-    uint8_t j = 0;     // LED index
-    uint8_t lv = 0;    // LED_Value index
-    uint8_t val[3];    // Integer LED value (0-255)
-    uint8_t v = 0;     // Integer LED value index
-    
-    while(j < NUM_LED) {
-        c = SDFile.read();
-        // Preprocessor outputs a space character as the value separator
-        // 32 = ASCII value for ' '
-        if(c != 32) {
-            LED_value[lv++] = c;
-            continue; 
-        }
-        
-        lv = 0;
-        val[v++] = atoi(LED_value);
-        memset(LED_value, 0, 3);
-        
-        //Wait until we have R, G, and B values loaded in
-        if (v >= 3) {
-         /*
-           Serial.print(val[0]);
-           Serial.print(", ");
-           Serial.print(val[1]);
-           Serial.print(", ");
-           Serial.println(val[2]);
-         */
-           // Load RGB into memory for LED at index j
-           setColorRGB(j, (val[0] * MAX_BRIGHTNESS)/255, (val[1] * MAX_BRIGHTNESS)/255, (val[2] * MAX_BRIGHTNESS)/255);
-           memset(val, 0, v); 
-           v = 0;
-           j++; 
-        }
-   }
-  // Serial.println("-------------------");
+    uint8_t val[(NUM_LED*3)];    // Integer LED value (0-255) corresponding to brightness of R G or B
+                                 // The array will hold RGB values for every LED we have in the order of
+                                 // R G B, so val[0] is R for LED 0, val[1] is B for 0, val[6] is R for LED 2
+    SDFile.read(val, (NUM_LED*3)); //Takes NUM_LED*3 values from the SD card and puts them in array val
+                                   //This is allowed to work because it reads a character at a time, storing it
+                                   //in the next section of val automatically
+
+    for(uint8_t j = 0; j < NUM_LED; j++){ //main loop that goes through all our LEDs to give them a value
+        setColorRGB(j, val[(j*3)+0], val[(j*3)+1] , val[(j*3)+2]); 
+        //j is the index of the LED, so led 0, led 1, led 2, etc
+        //val[0], val[3], val[6] etc hold the R value for LED 0, LED 2, LED 3
+        //So val[index based on j] basically iterates through every LED's RGB
+        //when j is 0 val[(j*3)+0] = val[0], j is 1 val[(j*3)+0] = val[3], etc
+
+        //MAX_BRIGHTNESS calculation has been moved to the preprocessor TODO delete this comment
+        //setColorRGB(j, (val[(j*3)+0] * MAX_BRIGHTNESS)/255, (val[(j*3)+1] * MAX_BRIGHTNESS)/255, (val[(j*3)+2] * MAX_BRIGHTNESS)/255);
+    }
+          
+   memset(val, 0, (NUM_LED*3)); //clear buffer for safety
 }
 
 /*
