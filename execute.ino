@@ -27,6 +27,7 @@ uint16_t rotations = 0;
 uint8_t  hallCount = 0;
 uint8_t  current;
 uint8_t  LEDVal[LED_BYTES];
+uint8_t  sliceNum = 0;      //Once this hits 3 we need to SD_read again
 
 File f;
 
@@ -72,6 +73,8 @@ void setup() {
     //Send an initial (0, 0, 0) signal for LEDs
     sendSignal();
 
+    SD_read(f); //Initial SD read
+
     //Initialize Hall-Effect reference time
     lastTime = micros();
     currentTime = micros();
@@ -91,15 +94,12 @@ void resetSDFile() {
     f = SD.open(RGB_FILENAME);
 }
 
-
-
 /*
 *  Hall Effect ISR 
 *
 *  Whenever this triggers another rotation has happened
 *  Calculate delay based on current RPM
 */
-
 void hallEffectISR() {
     
     //If there's still a bit of a delay it's here I need to change
@@ -127,17 +127,30 @@ void hallEffectISR() {
  * in addition to setting saying that we won't enter the next time slice until 180ms
  */
 void loop() {
+    //             
     currentTime = micros(); //check current time so it can be compared to however long a time slice is + however long it was
                             //when a time slice was last entered
   if(currentTime > lastSlice+(currentDelay)){ //lastSlice is whenever this time slice started in time, currentDelay is how long 
                                               //they should last
+    uint32_t ct = micros();
+
     lastSlice = currentTime; //we are in a new time slice, since we've just entered it this is the time of the lastSlice now
-    if (!f.available()){ //checking if we hit EOF on the sd card reader
-        resetSDFile();  //if we did we have to go back to the beginning of the file
+     
+    if(sliceNum > 2) {
+        uint32_t ct = micros();
+        SD_read(f); //take the next NUM_LEDs values from the sd card file and store them in uint8_t* RGBs
     }
-    SD_read(f); //take the next NUM_LEDs values from the sd card file and store them in uint8_t* RGBs
+    setMem();
     sendSignal(); //take the RGB values in uint8_t* RGBs and send them to our LEDs
     resetRGBMem(); //clear stuff out to make it nice
+
+    if(!LEDVal[LED_BYTES - 1]) {
+    // Serial.println("Reached EOF");
+    }
+
+      uint32_t at = micros();
+      Serial.print("Full loop: ");
+      Serial.println(at - ct);
   }
 }
 
@@ -169,33 +182,25 @@ void SD_write(File SDFile, char* msg) {
  * the sendSignal function can access them and turn on the LEDs
  */
 void SD_read(File SDFile) {
-    uint32_t ct = micros();           
-    
-    // Integer LED value (0-255) corresponding to brightness of R G or B
-                                   // The array will hold RGB values for every LED we have in the order of
-                                   // R G B, so val[0] is R for LED 0, val[1] is B for 0, val[6] is R for LED 2
-    SDFile.read(LEDVal, LED_BYTES);         //Takes NUM_LED*3 values from the SD card and puts them in array val
-                                   //This is allowed to work because it reads a character at a time, storing it
-                                   //in the next section of val automatically
-
-    if(!LEDVal[LED_BYTES - 1]) {
-       Serial.println("Reached EOF");
+  
+    if (!f.available()){   //checking if we hit EOF on the sd card reader
+        resetSDFile();     //if we did we have to go back to the beginning of the file
     }
+    sliceNum = 0;
+    memset(LEDVal, 0, LED_BYTES);
+    SDFile.read(LEDVal, LED_BYTES); 
     
-    for(uint16_t j = 0; j < LED_BYTES; j++){ //main loop that goes through all our LEDs to give them a value
+}
+
+void setMem() {
+   for(uint16_t j = (sliceNum * NUM_LED); j < (sliceNum * NUM_LED) + NUM_LED; j++){
         setColorRGB(j, LEDVal[(j*3)+0], LEDVal[(j*3)+1] , LEDVal[(j*3)+2]); 
         // j is the index of the LED, so led 0, led 1, led 2, etc
         // val[0], val[3], val[6] etc hold the R value for LED 0, LED 2, LED 3
         // So val[index based on j] basically iterates through every LED's RGB
         // when j is 0 val[(j*3)+0] = val[0], j is 1 val[(j*3)+0] = val[3], etc
     }
- 
-    memset(LEDVal, 0, LED_BYTES);
-        
-    uint32_t at = micros();
-    Serial.print("Full loop takes: ");
-    Serial.println(at - ct);
-    
+    sliceNum++;
 }
 
 /*
